@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ☀️ VARIABLES PARA MODO CLARO (Por defecto) */
+:root {
+  --bg-color: #f3f4f6;
+  --text-color: #111827;
+  --bg-card: #ffffff;
+  --border-color: #e5e7eb;
+}
+
+/* 🌙 VARIABLES PARA MODO OSCURO (Se activan cuando la clase es 'dark') */
+.dark {
+  --bg-color: #111827;
+  --text-color: #f9fafb;
+  --bg-card: #1f2937;
+  --border-color: #374151;
+}
+
+body {
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  transition: background-color 0.3s, color 0.3s; /* Animación suave al cambiar */
+}
+
+/* Ajustes globales para inputs y tablas */
+input[type="number"] {
+  background-color: var(--bg-card);
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+}
+
+table {
+  background-color: var(--bg-card) !important;
+  color: var(--text-color) !important;
+}
+
+/* Hacemos que la fila verde clasificada respete el modo oscuro */
+tr.fila-clasificada {
+  background-color: #f0fdf4;
+}
+.dark tr.fila-clasificada {
+  background-color: #064e3b; /* Un verde muy oscuro */
+}
