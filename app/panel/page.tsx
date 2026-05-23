@@ -7,18 +7,17 @@ import { useProde } from '../../src/context/ProdeContext';
 
 export default function PanelPrincipal() {
   const router = useRouter();
-  const { prodeActivo, cargandoProde, inicializarProde, crearProdeNuevo } = useProde();
+  // Agregamos descartarProde al desglose del contexto
+  const { prodeActivo, cargandoProde, inicializarProde, crearProdeNuevo, descartarProde } = useProde();
   const [prodesCompletados, setProdesCompletados] = useState<any[]>([]);
 
   useEffect(() => {
-    // 1. CAMBIO ACÁ: Chequeamos que el usuario realmente exista antes de cargar nada
     const chequearUsuario = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        window.location.replace('/'); // Si no hay sesión, al login directo
+        window.location.replace('/');
         return;
       }
-      // Si todo está bien, cargamos los datos
       inicializarProde();
       cargarProdesCompletados();
     };
@@ -45,7 +44,6 @@ export default function PanelPrincipal() {
   const manejarCerrarSesion = async () => {
     if (window.confirm('¿Seguro que querés cerrar sesión?')) {
       await supabase.auth.signOut();
-      // 2. CAMBIO ACÁ: Rompemos la caché del navegador para limpiar la sesión
       window.location.replace('/');
     }
   };
@@ -72,31 +70,36 @@ export default function PanelPrincipal() {
           <h2 style={{ marginTop: 0, fontSize: '20px', marginBottom: '20px' }}>Acciones</h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
             
-            {/* BOTÓN 1: INICIAR NUEVO PRODE */}
+            {/* BOTÓN 1: INICIAR NUEVO PRODE (Siempre activo, advierte si pisa datos) */}
             <button
               onClick={async () => {
-                await crearProdeNuevo();
+                if (tieneBorrador) {
+                  const seguro = window.confirm(
+                    '¡Atención! Ya tenés un prode activo en curso. Si iniciás uno nuevo, se borrará el progreso actual por completo. ¿Querés continuar?'
+                  );
+                  if (!seguro) return; // Cancela el flujo si dice que no
+                  await descartarProde(); // Borra el borrador viejo de la base de datos
+                }
+                await crearProdeNuevo(); // Crea el nuevo registro limpio
                 router.push('/nuevo-prode');
               }}
-              disabled={tieneBorrador}
               style={{
                 width: '100%',
-                backgroundColor: tieneBorrador ? 'var(--border-color)' : '#0070f3',
-                color: tieneBorrador ? 'var(--text-color)' : 'white',
+                backgroundColor: '#0070f3',
+                color: 'white',
                 padding: '14px',
                 borderRadius: '10px',
                 fontWeight: 'bold',
                 border: 'none',
                 fontSize: '16px',
-                cursor: tieneBorrador ? 'not-allowed' : 'pointer',
-                opacity: tieneBorrador ? 0.5 : 1,
+                cursor: 'pointer',
                 transition: 'all 0.2s'
               }}
             >
               ➕ Iniciar Nuevo Prode
             </button>
 
-            {/* BOTÓN 2: CONTINUAR PRODE */}
+            {/* BOTÓN 2: CONTINUAR PRODE EN CURSO */}
             <button
               onClick={() => router.push('/nuevo-prode')}
               disabled={!tieneBorrador}
@@ -145,7 +148,7 @@ export default function PanelPrincipal() {
 
       </div>
 
-      {/* BOTÓN DE CIERRE DE SESIÓN AL FINAL */}
+      {/* BOTÓN DE CIERRE DE SESIÓN */}
       <div style={{ marginTop: '40px', textAlign: 'center' }}>
         <button 
           onClick={manejarCerrarSesion}

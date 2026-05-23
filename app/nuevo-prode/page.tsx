@@ -5,8 +5,9 @@ import { useRouter } from 'next/navigation';
 import { useProde } from '../../src/context/ProdeContext';
 
 export default function NuevoProde() {
-  const router = useRouter(); // Agregamos el router para poder viajar al panel
-  const { prodeActivo, cargandoProde, inicializarProde, descartarProde } = useProde();
+  const router = useRouter();
+  // Traemos finalizarProde del contexto
+  const { prodeActivo, cargandoProde, inicializarProde, finalizarProde } = useProde();
 
   useEffect(() => {
     inicializarProde();
@@ -21,11 +22,37 @@ export default function NuevoProde() {
     { id: 'f', paises: ['🇳🇱 PAÍSES BAJOS', '🇯🇵 JAPÓN', '🇸🇪 SUECIA', '🇹🇳 TÚNEZ'] },
     { id: 'g', paises: ['🇧🇪 BÉLGICA', '🇪🇬 EGIPTO', '🇮🇷 IRÁN', '🇳🇿 N. ZELANDA'] },
     { id: 'h', paises: ['🇪🇸 ESPAÑA', '🇨🇻 CABO VERDE', '🇸🇦 ARABIA S.', '🇺🇾 URUGUAY'] },
-    { id: 'i', paises: ['🇫🇷 FRANCIA', '🇸🇳 SENEGAL', '🇮🇶 IRAK', '🇳🇴 NORUEGA'] },
+    { id: 'i', paises: ['🇫🇷 FRANCIA', '🇸🇳 SENEGAL', '🇮尋 IRAK', '🇳🇴 NORUEGA'] },
     { id: 'j', paises: ['🇦🇷 ARGENTINA', '🇩🇿 ARGELIA', '🇦🇹 AUSTRIA', '🇯🇴 JORDANIA'] },
     { id: 'k', paises: ['🇵🇹 PORTUGAL', '🇨🇩 RD CONGO', '🇺🇿 UZBEKISTÁN', '🇨🇴 COLOMBIA'] },
     { id: 'l', paises: ['🏴󠁧󠁢󠁥󠁮󠁧󠁿 INGLATERRA', '🇭🇷 CROACIA', '🇬🇭 GHANA', '🇵🇦 PANAMÁ'] },
   ];
+
+  const obtenerEstadoGrupo = (grupoId: string) => {
+    if (!prodeActivo || !prodeActivo.datos_prediccion) return null;
+    
+    const prediccionesGrupo = prodeActivo.datos_prediccion[grupoId] || {};
+    const partidos = Object.values(prediccionesGrupo) as { local: any; visitante: any }[];
+    const totalPartidos = 6;
+    
+    const partidosCompletos = partidos.filter(
+      p => p.local !== undefined && p.local !== '' && p.visitante !== undefined && p.visitante !== ''
+    ).length;
+
+    const tieneProgreso = partidos.some(
+      p => (p.local !== undefined && p.local !== '') || (p.visitante !== undefined && p.visitante !== '')
+    );
+
+    if (partidosCompletos === totalPartidos) {
+      return '✅';
+    } else if (tieneProgreso) {
+      return '⏳';
+    }
+    return null;
+  };
+
+  // CONTROL DE CONTROL: Verifica si ABSOLUTAMENTE TODOS los grupos están terminados con éxito
+  const todoCompleto = estructuraMundial.every(grupo => obtenerEstadoGrupo(grupo.id) === '✅');
 
   if (cargandoProde) {
     return (
@@ -56,7 +83,7 @@ export default function NuevoProde() {
         </Link>
       </div>
 
-      {/* PANEL DE CONTROL DEL BORRADOR */}
+      {/* PANEL DE CONTROL DEL BORRADOR CON EL NUEVO BOTÓN INTEGRADO */}
       <div style={{ 
         backgroundColor: 'var(--bg-card)', 
         padding: '15px 25px', 
@@ -64,11 +91,11 @@ export default function NuevoProde() {
         border: '1px solid var(--border-color)', 
         marginBottom: '30px', 
         display: 'flex', 
-        justifyContent: 'space-between', 
+        justifyContent: 'space-between', // Separa la info del botón
         alignItems: 'center',
         boxShadow: '0 4px 6px rgba(0,0,0,0.05)'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
           <span style={{ fontSize: '24px' }}>📝</span>
           <div style={{ textAlign: 'left' }}>
             <div style={{ fontWeight: 'bold', color: 'var(--text-color)', fontSize: '18px' }}>
@@ -79,22 +106,34 @@ export default function NuevoProde() {
             </div>
           </div>
         </div>
-        
-        {/* BOTÓN ELIMINAR PRODE */}
-        <button 
+
+        {/* BOTÓN INTELIGENTE DE FINALIZAR */}
+        <button
+          disabled={!todoCompleto}
           onClick={async () => {
-            if(window.confirm('¿Estás seguro de que querés eliminar este prode? Perderás todo el progreso.')) {
-              await descartarProde();
-              router.push('/panel'); // Te manda al panel apenas termina de borrar
+            if (window.confirm('¿Estás seguro de que querés guardar este prode definitivo? Una vez enviado ya no vas a poder editar tus predicciones.')) {
+              await finalizarProde();
+              router.push('/panel'); // Nos manda al panel donde veremos el fixture completado
             }
-          }} 
-          style={{ backgroundColor: '#ef4444', color: 'white', padding: '10px 20px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}
+          }}
+          style={{
+            backgroundColor: todoCompleto ? '#10b981' : 'var(--border-color)',
+            color: todoCompleto ? 'white' : 'var(--text-color)',
+            padding: '10px 20px',
+            borderRadius: '8px',
+            fontWeight: 'bold',
+            border: 'none',
+            fontSize: '14px',
+            cursor: todoCompleto ? 'pointer' : 'not-allowed',
+            opacity: todoCompleto ? 1 : 0.5,
+            transition: 'all 0.2s'
+          }}
         >
-          Eliminar prode
+          🚀 Guardar Prode Definitivo
         </button>
       </div>
 
-      {/* GRILLA BANDERAS 2x2 */}
+      {/* GRILLA BANDERAS */}
       <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '20px' }}>
         {estructuraMundial.map((datosGrupo) => (
           <Link 
@@ -104,9 +143,11 @@ export default function NuevoProde() {
             onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-5px)'; e.currentTarget.style.boxShadow = '0 8px 15px rgba(0,0,0,0.2)'; }}
             onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)'; }}
           >
-            <span style={{ fontSize: '24px', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '15px', borderBottom: '1px solid rgba(255,255,255,0.3)', paddingBottom: '3px', width: '100%' }}>
-              Grupo {datosGrupo.id}
+            <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '24px', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '15px', borderBottom: '1px solid rgba(255,255,255,0.3)', paddingBottom: '3px', width: '100%' }}>
+              <span>Grupo {datosGrupo.id}</span>
+              <span style={{ fontSize: '22px' }}>{obtenerEstadoGrupo(datosGrupo.id)}</span>
             </span>
+            
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '15px', margin: 'auto' }}>
               {datosGrupo.paises.map((pais, index) => (
                 <span key={index} style={{ fontSize: '48px', lineHeight: '1' }}>{pais.split(' ')[0]}</span>

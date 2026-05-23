@@ -16,6 +16,7 @@ type ProdeContextType = {
   crearProdeNuevo: () => Promise<void>;
   guardarPrediccion: (grupoId: string, partidoId: string, golesLocal: number | string, golesVisitante: number | string) => Promise<void>;
   descartarProde: () => Promise<void>;
+  finalizarProde: () => Promise<void>; // NUEVA ACCIÓN
 };
 
 const ProdeContext = createContext<ProdeContextType | undefined>(undefined);
@@ -24,7 +25,6 @@ export function ProdeProvider({ children }: { children: ReactNode }) {
   const [prodeActivo, setProdeActivo] = useState<Prode | null>(null);
   const [cargandoProde, setCargandoProde] = useState(true);
   
-  // Referencia para el Guardián de Supabase (evita que se abra dos veces)
   const guardianRealtime = useRef<any>(null);
 
   const inicializarProde = async () => {
@@ -38,7 +38,6 @@ export function ProdeProvider({ children }: { children: ReactNode }) {
 
       const userId = session.user.id;
 
-      // --- NUEVO: GUARDIÁN CROSS-BROWSER EN TIEMPO REAL ---
       if (!guardianRealtime.current) {
         const miTokenLocal = sessionStorage.getItem('prode_session_token');
         
@@ -49,7 +48,6 @@ export function ProdeProvider({ children }: { children: ReactNode }) {
             table: 'perfiles', 
             filter: `id=eq.${userId}` 
           }, async (payload) => {
-            // Si el token en la BD cambió y ya no coincide con el mío, me patearon
             if (payload.new.session_token && payload.new.session_token !== miTokenLocal) {
               await supabase.auth.signOut();
               sessionStorage.removeItem('prode_session_token');
@@ -58,7 +56,6 @@ export function ProdeProvider({ children }: { children: ReactNode }) {
           })
           .subscribe();
       }
-      // ---------------------------------------------------
 
       const { data: borradores, error: fetchError } = await supabase
         .from('prodes')
@@ -137,8 +134,27 @@ export function ProdeProvider({ children }: { children: ReactNode }) {
     setCargandoProde(false);
   };
 
+  // NUEVA FUNCIÓN PARA ENVIAR EL PRODE DEFINITIVO
+  const finalizarProde = async () => {
+    if (!prodeActivo) return;
+    setCargandoProde(true);
+    try {
+      const { error } = await supabase
+        .from('prodes')
+        .update({ estado: 'completado' })
+        .eq('id', prodeActivo.id);
+
+      if (error) throw error;
+      setProdeActivo(null); // Borrador completado, limpiamos el estado activo
+    } catch (error) {
+      console.error("Error finalizando el prode:", error);
+    } finally {
+      setCargandoProde(false);
+    }
+  };
+
   return (
-    <ProdeContext.Provider value={{ prodeActivo, cargandoProde, inicializarProde, crearProdeNuevo, guardarPrediccion, descartarProde }}>
+    <ProdeContext.Provider value={{ prodeActivo, cargandoProde, inicializarProde, crearProdeNuevo, guardarPrediccion, descartarProde, finalizarProde }}>
       {children}
     </ProdeContext.Provider>
   );
