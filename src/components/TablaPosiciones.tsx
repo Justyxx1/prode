@@ -1,95 +1,113 @@
-export default function TablaPosiciones({ partidos, prodes }: { partidos: any[], prodes: any }) {
-  // 1. Preparamos un objeto para guardar las estadísticas de cada equipo
-  const estadisticas: any = {};
+'use client';
+import { useMemo } from 'react';
 
-  // 2. Inicializamos todos los equipos del grupo en cero
-  partidos.forEach(p => {
-    if (!estadisticas[p.local]) estadisticas[p.local] = { nombre: p.local, pts: 0, pj: 0, gf: 0, gc: 0, dif: 0 };
-    if (!estadisticas[p.visitante]) estadisticas[p.visitante] = { nombre: p.visitante, pts: 0, pj: 0, gf: 0, gc: 0, dif: 0 };
-  });
+// Tipado estricto para que TypeScript no se queje
+interface Partido {
+  id: string;
+  local: string;
+  visitante: string;
+}
 
-  // 3. Calculamos los puntos en base a los prodes que están llenos
-  partidos.forEach(partido => {
-    const prode = prodes[partido.id];
-    
-    // Solo calculamos si el usuario ingresó ambos goles
-    if (prode && typeof prode.local === 'number' && typeof prode.visitante === 'number') {
-      const gL = Number(prode.local);
-      const gV = Number(prode.visitante);
+interface TablaPosicionesProps {
+  partidos: Partido[];
+  prodes: Record<string, { local: string | number; visitante: string | number }>;
+}
 
-      // Partidos jugados y goles a favor/contra
-      estadisticas[partido.local].pj += 1;
-      estadisticas[partido.visitante].pj += 1;
-      estadisticas[partido.local].gf += gL;
-      estadisticas[partido.local].gc += gV;
-      estadisticas[partido.visitante].gf += gV;
-      estadisticas[partido.visitante].gc += gL;
+export default function TablaPosiciones({ partidos, prodes }: TablaPosicionesProps) {
+  
+  // useMemo obliga a React a recalcular la tabla SOLO cuando cambian los goles o los partidos
+  const tabla = useMemo(() => {
+    // 1. Preparamos los contadores en cero para cada equipo
+    const equipos: Record<string, any> = {};
+    partidos.forEach((p) => {
+      if (!equipos[p.local]) equipos[p.local] = { nombre: p.local, pts: 0, pj: 0, pg: 0, pe: 0, pp: 0, gf: 0, gc: 0, dg: 0 };
+      if (!equipos[p.visitante]) equipos[p.visitante] = { nombre: p.visitante, pts: 0, pj: 0, pg: 0, pe: 0, pp: 0, gf: 0, gc: 0, dg: 0 };
+    });
 
-      // Cálculo de puntos
-      if (gL > gV) {
-        estadisticas[partido.local].pts += 3; // Gana local
-      } else if (gV > gL) {
-        estadisticas[partido.visitante].pts += 3; // Gana visitante
-      } else {
-        estadisticas[partido.local].pts += 1; // Empate
-        estadisticas[partido.visitante].pts += 1;
+    // 2. Revisamos cada partido para ver si el usuario le puso goles
+    partidos.forEach((p) => {
+      const prediccion = prodes[p.id];
+      
+      // Nos aseguramos de que haya algo escrito y no esté vacío
+      if (prediccion && prediccion.local !== '' && prediccion.visitante !== '') {
+        // Forzamos a que sean números enteros para no concatenar strings
+        const golesL = parseInt(prediccion.local as string, 10);
+        const golesV = parseInt(prediccion.visitante as string, 10);
+
+        // Si son números válidos, hacemos la matemática
+        if (!isNaN(golesL) && !isNaN(golesV)) {
+          equipos[p.local].pj += 1;
+          equipos[p.visitante].pj += 1;
+          
+          equipos[p.local].gf += golesL;
+          equipos[p.visitante].gf += golesV;
+          
+          equipos[p.local].gc += golesV;
+          equipos[p.visitante].gc += golesL;
+
+          if (golesL > golesV) {
+            equipos[p.local].pts += 3;
+            equipos[p.local].pg += 1;
+            equipos[p.visitante].pp += 1;
+          } else if (golesL < golesV) {
+            equipos[p.visitante].pts += 3;
+            equipos[p.visitante].pg += 1;
+            equipos[p.local].pp += 1;
+          } else {
+            equipos[p.local].pts += 1;
+            equipos[p.visitante].pts += 1;
+            equipos[p.local].pe += 1;
+            equipos[p.visitante].pe += 1;
+          }
+        }
       }
-    }
-  });
+    });
 
-  // 4. Transformamos el objeto en una lista y la ordenamos
-  const tablaOrdenada = Object.values(estadisticas).sort((a: any, b: any) => {
-    if (b.pts !== a.pts) return b.pts - a.pts; // Mayor puntaje primero
+    // 3. Calculamos la Diferencia de Gol y ordenamos (Mayor Puntos -> Mayor DG -> Mayor GF)
+    const listaEquipos = Object.values(equipos).map(e => ({ ...e, dg: e.gf - e.gc }));
     
-    const difA = a.gf - a.gc;
-    const difB = b.gf - b.gc;
-    if (difB !== difA) return difB - difA; // Si empatan en puntos, mayor diferencia de gol
-    
-    return b.gf - a.gf; // Si empatan en diferencia, mayor cantidad de goles a favor
-  });
+    listaEquipos.sort((a, b) => {
+      if (b.pts !== a.pts) return b.pts - a.pts; // Prioridad 1: Puntos
+      if (b.dg !== a.dg) return b.dg - a.dg;     // Prioridad 2: Diferencia de gol
+      return b.gf - a.gf;                        // Prioridad 3: Goles a favor
+    });
 
-  // 5. Dibujamos la tabla
+    return listaEquipos;
+  }, [partidos, prodes]); // Esta es la línea mágica: "Recalculate cuando cambie 'prodes'"
+
   return (
-    <div style={{ overflowX: 'auto', marginBottom: '30px' }}>
-      {/* CAMBIO 1: backgroundColor usa var(--bg-card) */}
-      <table style={{ 
-        width: '100%', 
-        borderCollapse: 'collapse', 
-        backgroundColor: 'var(--bg-card)',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-        borderRadius: '8px',
-        overflow: 'hidden'
-      }}>
+    <div style={{ overflowX: 'auto', backgroundColor: 'var(--bg-card)', borderRadius: '12px', border: '1px solid var(--border-color)', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center', fontSize: '14px', color: 'var(--text-color)' }}>
         <thead>
-          <tr style={{ backgroundColor: '#0070f3', color: 'white' }}>
+          <tr style={{ backgroundColor: 'var(--bg-color)', borderBottom: '2px solid var(--border-color)' }}>
             <th style={{ padding: '12px', textAlign: 'left' }}>Equipo</th>
-            <th style={{ padding: '12px', textAlign: 'center' }}>PJ</th>
-            <th style={{ padding: '12px', textAlign: 'center' }}>Pts</th>
-            <th style={{ padding: '12px', textAlign: 'center' }}>GF</th>
-            <th style={{ padding: '12px', textAlign: 'center' }}>GC</th>
-            <th style={{ padding: '12px', textAlign: 'center' }}>DIF</th>
+            <th style={{ padding: '12px', width: '40px' }} title="Puntos">Pts</th>
+            <th style={{ padding: '12px', width: '40px', opacity: 0.7 }} title="Partidos Jugados">PJ</th>
+            <th style={{ padding: '12px', width: '40px', opacity: 0.7 }} title="Partidos Ganados">PG</th>
+            <th style={{ padding: '12px', width: '40px', opacity: 0.7 }} title="Partidos Empatados">PE</th>
+            <th style={{ padding: '12px', width: '40px', opacity: 0.7 }} title="Partidos Perdidos">PP</th>
+            <th style={{ padding: '12px', width: '40px', opacity: 0.7 }} title="Goles a Favor">GF</th>
+            <th style={{ padding: '12px', width: '40px', opacity: 0.7 }} title="Goles en Contra">GC</th>
+            <th style={{ padding: '12px', width: '40px' }} title="Diferencia de Gol">DG</th>
           </tr>
         </thead>
         <tbody>
-          {tablaOrdenada.map((equipo: any, index: number) => {
-            const diferencia = equipo.gf - equipo.gc;
-            return (
-                <tr 
-                  key={equipo.nombre} 
-                  className={index < 2 ? 'fila-clasificada' : ''}
-                  style={{ borderBottom: '1px solid var(--border-color)' }}
-                >
-                  <td style={{ padding: '12px', fontWeight: 'bold' }}>{equipo.nombre}</td>
-                  <td style={{ padding: '12px', textAlign: 'center', color: 'var(--text-color)', opacity: 0.8 }}>{equipo.pj}</td>
-                  <td style={{ padding: '12px', textAlign: 'center', fontWeight: 'bold', fontSize: '1.1em' }}>{equipo.pts}</td>
-                  <td style={{ padding: '12px', textAlign: 'center', color: 'var(--text-color)', opacity: 0.8 }}>{equipo.gf}</td>
-                  <td style={{ padding: '12px', textAlign: 'center', color: 'var(--text-color)', opacity: 0.8 }}>{equipo.gc}</td>
-                  <td style={{ padding: '12px', textAlign: 'center', fontWeight: 'bold', color: diferencia > 0 ? '#10b981' : diferencia < 0 ? '#ef4444' : 'var(--text-color)' }}>
-                    {diferencia > 0 ? `+${diferencia}` : diferencia}
-                  </td>
-                </tr>
-            );
-          })}
+          {tabla.map((equipo, index) => (
+            <tr key={equipo.nombre} style={{ borderBottom: '1px solid var(--border-color)', backgroundColor: index < 2 ? 'rgba(16, 185, 129, 0.1)' : 'transparent' }}>
+              <td style={{ padding: '12px', textAlign: 'left', fontWeight: 'bold' }}>
+                <span style={{ marginRight: '8px', opacity: 0.5, fontSize: '12px' }}>{index + 1}</span>
+                {equipo.nombre}
+              </td>
+              <td style={{ padding: '12px', fontWeight: 'bold', color: '#10b981' }}>{equipo.pts}</td>
+              <td style={{ padding: '12px', opacity: 0.8 }}>{equipo.pj}</td>
+              <td style={{ padding: '12px', opacity: 0.8 }}>{equipo.pg}</td>
+              <td style={{ padding: '12px', opacity: 0.8 }}>{equipo.pe}</td>
+              <td style={{ padding: '12px', opacity: 0.8 }}>{equipo.pp}</td>
+              <td style={{ padding: '12px', opacity: 0.8 }}>{equipo.gf}</td>
+              <td style={{ padding: '12px', opacity: 0.8 }}>{equipo.gc}</td>
+              <td style={{ padding: '12px', fontWeight: 'bold' }}>{equipo.dg > 0 ? `+${equipo.dg}` : equipo.dg}</td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>
