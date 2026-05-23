@@ -1,5 +1,6 @@
 'use client';
 import { useMemo, use, useEffect } from 'react';
+import Link from 'next/link';
 import { generarPartidos } from '../../../data/mundial';
 import TablaPosiciones from '../../../src/components/TablaPosiciones';
 import { useProde } from '../../../src/context/ProdeContext';
@@ -36,16 +37,22 @@ export default function PaginaGrupo({ params }: { params: Promise<any> }) {
     guardarPrediccion(idGrupo, partidoId, golesLocalActual, golesVisitanteActual);
   };
 
-  // Función mágica para separar el emoji de la bandera del nombre del país
   const separarBandera = (texto: string) => {
     const partes = texto.split(' ');
     const bandera = partes[0];
-    const nombre = partes.slice(1).join(' '); // Vuelve a unir el nombre por si tiene más de una palabra
+    const nombre = partes.slice(1).join(' ');
     return { bandera, nombre };
   };
 
   return (
     <div style={{ padding: '20px', maxWidth: '800px', margin: 'auto', fontFamily: 'sans-serif' }}>
+      
+      {/* BOTÓN DE VOLVER A LA GRILLA DE GRUPOS */}
+      <div style={{ marginBottom: '20px', textAlign: 'left' }}>
+        <Link href="/nuevo-prode" style={{ color: 'var(--text-color)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '8px', fontWeight: 'bold', fontSize: '15px', opacity: 0.8 }}>
+          ← Volver a todos los Grupos
+        </Link>
+      </div>
       
       <TablaPosiciones partidos={partidos} prodes={prodesDelGrupo} />
 
@@ -53,7 +60,6 @@ export default function PaginaGrupo({ params }: { params: Promise<any> }) {
         <h2 style={{ marginTop: 0, color: 'var(--text-color)' }}>Cargar Resultados</h2>
         
         {partidos.map((partido: any) => {
-          // Separamos la info de cada equipo antes de mostrarla
           const local = separarBandera(partido.local);
           const visitante = separarBandera(partido.visitante);
 
@@ -70,7 +76,6 @@ export default function PaginaGrupo({ params }: { params: Promise<any> }) {
               border: '1px solid var(--border-color)'
             }}>
               
-              {/* EQUIPO LOCAL: Nombre a la izquierda - Bandera a la derecha */}
               <div style={{ display: 'flex', flex: 1, justifyContent: 'flex-end', alignItems: 'center', gap: '8px' }}>
                 <span style={{ fontWeight: '500', textAlign: 'right' }}>{local.nombre}</span>
                 <span style={{ fontSize: '20px', lineHeight: '1' }}>{local.bandera}</span>
@@ -92,7 +97,6 @@ export default function PaginaGrupo({ params }: { params: Promise<any> }) {
                 onChange={(e) => actualizarProde(partido.id, 'visitante', e.target.value)}
               />
               
-              {/* EQUIPO VISITANTE: Bandera a la izquierda - Nombre a la derecha */}
               <div style={{ display: 'flex', flex: 1, justifyContent: 'flex-start', alignItems: 'center', gap: '8px' }}>
                 <span style={{ fontSize: '20px', lineHeight: '1' }}>{visitante.bandera}</span>
                 <span style={{ fontWeight: '500', textAlign: 'left' }}>{visitante.nombre}</span>

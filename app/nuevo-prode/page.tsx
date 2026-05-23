@@ -1,9 +1,11 @@
 'use client';
 import Link from 'next/link';
 import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useProde } from '../../src/context/ProdeContext';
 
 export default function NuevoProde() {
+  const router = useRouter(); // Agregamos el router para poder viajar al panel
   const { prodeActivo, cargandoProde, inicializarProde, descartarProde } = useProde();
 
   useEffect(() => {
@@ -33,9 +35,27 @@ export default function NuevoProde() {
     );
   }
 
+  if (!prodeActivo) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minHeight: '50vh', gap: '20px' }}>
+        <h2 style={{ color: 'var(--text-color)' }}>No tenés ningún prode en curso.</h2>
+        <Link href="/panel" style={{ backgroundColor: '#0070f3', color: 'white', padding: '10px 20px', borderRadius: '8px', textDecoration: 'none', fontWeight: 'bold' }}>
+          Volver al Menú Principal
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <div style={{ padding: '40px', maxWidth: '1200px', margin: 'auto', textAlign: 'center', fontFamily: 'sans-serif' }}>
       
+      {/* BOTÓN PARA VOLVER AL PANEL PRINCIPAL */}
+      <div style={{ marginBottom: '20px', textAlign: 'left' }}>
+        <Link href="/panel" style={{ color: 'var(--text-color)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '8px', fontWeight: 'bold', fontSize: '15px', opacity: 0.8 }}>
+          ← Volver al Menú Principal
+        </Link>
+      </div>
+
       {/* PANEL DE CONTROL DEL BORRADOR */}
       <div style={{ 
         backgroundColor: 'var(--bg-card)', 
@@ -60,74 +80,37 @@ export default function NuevoProde() {
           </div>
         </div>
         
+        {/* BOTÓN ELIMINAR PRODE */}
         <button 
           onClick={async () => {
-            if(window.confirm('¿Estás seguro de descartar todo este prode y empezar de cero?')) {
+            if(window.confirm('¿Estás seguro de que querés eliminar este prode? Perderás todo el progreso.')) {
               await descartarProde();
+              router.push('/panel'); // Te manda al panel apenas termina de borrar
             }
           }} 
-          style={{ 
-            backgroundColor: '#ef4444', 
-            color: 'white', 
-            padding: '10px 20px', 
-            borderRadius: '8px', 
-            border: 'none', 
-            cursor: 'pointer', 
-            fontWeight: 'bold',
-            transition: 'background-color 0.2s'
-          }}
-          onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#dc2626'}
-          onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#ef4444'}
+          style={{ backgroundColor: '#ef4444', color: 'white', padding: '10px 20px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}
         >
-          Descartar y empezar de nuevo
+          Eliminar prode
         </button>
       </div>
 
-      {/* LA GRILLA INTERACTIVA CON BANDERAS 2x2 */}
+      {/* GRILLA BANDERAS 2x2 */}
       <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '20px' }}>
         {estructuraMundial.map((datosGrupo) => (
           <Link 
             key={datosGrupo.id} 
             href={`/grupo/${datosGrupo.id}`}
-            className="group"
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              padding: '20px',
-              backgroundColor: '#0070f3',
-              color: 'white',
-              textDecoration: 'none',
-              borderRadius: '12px',
-              boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-              transition: 'transform 0.2s, box-shadow 0.2s',
-              minHeight: '200px',
-              flex: '1 1 250px',
-              maxWidth: '100%' 
-            }}
-            onMouseOver={(e) => {
-              e.currentTarget.style.transform = 'translateY(-5px)';
-              e.currentTarget.style.boxShadow = '0 8px 15px rgba(0,0,0,0.2)';
-            }}
-            onMouseOut={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)';
-            }}
+            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px', backgroundColor: '#0070f3', color: 'white', textDecoration: 'none', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', transition: 'transform 0.2s, box-shadow 0.2s', minHeight: '200px', flex: '1 1 250px', maxWidth: '100%' }}
+            onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-5px)'; e.currentTarget.style.boxShadow = '0 8px 15px rgba(0,0,0,0.2)'; }}
+            onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)'; }}
           >
             <span style={{ fontSize: '24px', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '15px', borderBottom: '1px solid rgba(255,255,255,0.3)', paddingBottom: '3px', width: '100%' }}>
               Grupo {datosGrupo.id}
             </span>
-
-            {/* CONTENEDOR 2x2 CLÁSICO */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '15px', margin: 'auto' }}>
-              {datosGrupo.paises.map((pais, index) => {
-                const bandera = pais.split(' ')[0]; // Extraemos solo el emoji de la bandera
-                return (
-                  <span key={index} style={{ fontSize: '48px', lineHeight: '1' }}>
-                    {bandera}
-                  </span>
-                );
-              })}
+              {datosGrupo.paises.map((pais, index) => (
+                <span key={index} style={{ fontSize: '48px', lineHeight: '1' }}>{pais.split(' ')[0]}</span>
+              ))}
             </div>
           </Link>
         ))}

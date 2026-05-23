@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../src/lib/supabase';
 import { cambiarPassword } from '../src/lib/actions';
@@ -7,6 +7,9 @@ import { cambiarPassword } from '../src/lib/actions';
 export default function Login() {
   const router = useRouter();
   
+  // Estado para la verificación inicial de sesión
+  const [verificandoSesion, setVerificandoSesion] = useState(true);
+
   // Estados para Login/Registro
   const [isRegistro, setIsRegistro] = useState(false);
   const [nickname, setNickname] = useState('');
@@ -24,6 +27,22 @@ export default function Login() {
   const [exito, setExito] = useState('');
   const [codigoGenerado, setCodigoGenerado] = useState('');
 
+  // --- 0. VERIFICAR SESIÓN ACTIVA EN OTRA PESTAÑA ---
+  useEffect(() => {
+    const chequearSesionExistente = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        // Si ya está logueado en el navegador, lo mandamos derecho al panel
+        router.push('/panel');
+      } else {
+        // Si no hay sesión, apagamos la carga y mostramos el formulario
+        setVerificandoSesion(false);
+      }
+    };
+
+    chequearSesionExistente();
+  }, [router]);
+
   // --- 1. LOGIN Y REGISTRO NORMAL ---
   const manejarSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,6 +55,7 @@ export default function Login() {
 
     try {
       if (isRegistro) {
+        // ... (Flujo de registro se mantiene igual)
         const { data, error: signUpError } = await supabase.auth.signUp({ email: emailFalso, password });
         if (signUpError) {
           if (signUpError.message.includes('already registered')) throw new Error('Ese nickname ya está en uso.');
@@ -43,7 +63,6 @@ export default function Login() {
         }
 
         if (data.user) {
-          // Generamos un código más largo y bonito (ej: ABC-DEF-GHI) para usuarios nuevos
           const rawCode = Math.random().toString(36).substring(2, 11).toUpperCase();
           const codigoSecreto = rawCode.match(/.{1,3}/g)?.join('-') || rawCode;
           
@@ -55,6 +74,30 @@ export default function Login() {
           setCodigoGenerado(codigoSecreto);
         }
       } else {
+        // --- VERIFICACIÓN MULTI-PESTAÑA ANTES DE LOGUEAR ---
+        const canal = new BroadcastChannel('prode_auth_channel');
+        let loginBloqueado = false;
+
+        // 1. Escuchamos por si alguien nos deniega la entrada
+        canal.onmessage = (event) => {
+          if (event.data.type === 'LOGIN_DENIED' && event.data.email === emailFalso) {
+            loginBloqueado = true;
+          }
+        };
+
+        // 2. Preguntamos a todas las pestañas abiertas
+        canal.postMessage({ type: 'CHECK_LOGIN_ATTEMPT', email: emailFalso });
+
+        // 3. Hacemos una pausa de 400 milisegundos para darles tiempo a responder
+        await new Promise(resolve => setTimeout(resolve, 400));
+        canal.close();
+
+        // 4. Si alguien levantó la mano, bloqueamos el login cortando la función
+        if (loginBloqueado) {
+          throw new Error('Ya tenés una sesión abierta con este usuario en otra pestaña. Cerrala para poder entrar acá.');
+        }
+        // --- FIN VERIFICACIÓN ---
+
         const { error: signInError } = await supabase.auth.signInWithPassword({ email: emailFalso, password });
         if (signInError) throw new Error('Nickname o contraseña incorrectos.');
         router.push('/panel');
@@ -96,14 +139,13 @@ export default function Login() {
     if (nuevaPassword.length < 6) { setError('La contraseña debe tener al menos 6 caracteres.'); setLoading(false); return; }
 
     try {
-      // Llamamos a nuestro Server Action seguro
       await cambiarPassword(usuarioRecuperado!.id, nuevaPassword);
       
       setExito('¡Contraseña cambiada con éxito! Ya podés iniciar sesión.');
       setTimeout(() => {
         setIsRecuperando(false);
         setUsuarioRecuperado(null);
-        setNickname(usuarioRecuperado!.nickname); // Le precargamos el nombre
+        setNickname(usuarioRecuperado!.nickname);
         setExito('');
       }, 3000);
 
@@ -113,6 +155,15 @@ export default function Login() {
       setLoading(false);
     }
   };
+
+  // VISTA: Chequeando sesión al abrir la pestaña
+  if (verificandoSesion) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '70vh', color: 'var(--text-color)' }}>
+        <h2>Conectando... ⚽</h2>
+      </div>
+    );
+  }
 
   // VISTA: Registro Exitoso (Muestra el código)
   if (codigoGenerado) {
