@@ -1,5 +1,5 @@
 'use client';
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useRef, ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
 
 type Prode = {
@@ -23,28 +23,9 @@ const ProdeContext = createContext<ProdeContextType | undefined>(undefined);
 export function ProdeProvider({ children }: { children: ReactNode }) {
   const [prodeActivo, setProdeActivo] = useState<Prode | null>(null);
   const [cargandoProde, setCargandoProde] = useState(true);
-
-  // --- NUEVO: GUARDIÁN DE PESTAÑAS (Walkie-Talkie) ---
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const canal = new BroadcastChannel('prode_auth_channel');
-
-    canal.onmessage = async (event) => {
-      // Si otra pestaña está intentando iniciar sesión...
-      if (event.data.type === 'CHECK_LOGIN_ATTEMPT') {
-        const { data: { session } } = await supabase.auth.getSession();
-        
-        // Si ESTA pestaña tiene el mismo usuario logueado, mandamos la alerta de bloqueo
-        if (session && session.user.email === event.data.email) {
-          canal.postMessage({ type: 'LOGIN_DENIED', email: event.data.email });
-        }
-      }
-    };
-
-    return () => canal.close();
-  }, []);
-  // --------------------------------------------------
+  
+  // Referencia para el Guardián de Supabase (evita que se abra dos veces)
+  const guardianRealtime = useRef<any>(null);
 
   const inicializarProde = async () => {
     setCargandoProde(true);
@@ -56,6 +37,28 @@ export function ProdeProvider({ children }: { children: ReactNode }) {
       }
 
       const userId = session.user.id;
+
+      // --- NUEVO: GUARDIÁN CROSS-BROWSER EN TIEMPO REAL ---
+      if (!guardianRealtime.current) {
+        const miTokenLocal = sessionStorage.getItem('prode_session_token');
+        
+        guardianRealtime.current = supabase.channel(`sesion_${userId}`)
+          .on('postgres_changes', { 
+            event: 'UPDATE', 
+            schema: 'public', 
+            table: 'perfiles', 
+            filter: `id=eq.${userId}` 
+          }, async (payload) => {
+            // Si el token en la BD cambió y ya no coincide con el mío, me patearon
+            if (payload.new.session_token && payload.new.session_token !== miTokenLocal) {
+              await supabase.auth.signOut();
+              sessionStorage.removeItem('prode_session_token');
+              window.location.replace('/?kicked=true');
+            }
+          })
+          .subscribe();
+      }
+      // ---------------------------------------------------
 
       const { data: borradores, error: fetchError } = await supabase
         .from('prodes')

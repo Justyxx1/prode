@@ -14,6 +14,7 @@ export default function Login() {
   const [isRegistro, setIsRegistro] = useState(false);
   const [nickname, setNickname] = useState('');
   const [password, setPassword] = useState('');
+  const [mensajeKick, setMensajeKick] = useState('');
   
   // Estados para Recuperación
   const [isRecuperando, setIsRecuperando] = useState(false);
@@ -43,7 +44,16 @@ export default function Login() {
     chequearSesionExistente();
   }, [router]);
 
-  // --- 1. LOGIN Y REGISTRO NORMAL ---
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('kicked') === 'true') {
+      setMensajeKick('Se inició sesión en otro dispositivo. Tu sesión aquí fue cerrada.');
+      // Limpiamos la URL para que no quede trabado el ?kicked=true
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
+
+  /// --- 1. LOGIN Y REGISTRO NORMAL ---
   const manejarSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true); setError(''); setExito('');
@@ -52,10 +62,12 @@ export default function Login() {
     if (password.length < 6) { setError('La contraseña debe tener al menos 6 caracteres.'); setLoading(false); return; }
 
     const emailFalso = `${nickname.toLowerCase().replace(/\s+/g, '')}@prodemundial.local`;
+    
+    // Generamos un token único e irrepetible para esta pestaña
+    const miToken = Math.random().toString(36).substring(2) + Date.now().toString(36);
 
     try {
       if (isRegistro) {
-        // ... (Flujo de registro se mantiene igual)
         const { data, error: signUpError } = await supabase.auth.signUp({ email: emailFalso, password });
         if (signUpError) {
           if (signUpError.message.includes('already registered')) throw new Error('Ese nickname ya está en uso.');
@@ -66,40 +78,30 @@ export default function Login() {
           const rawCode = Math.random().toString(36).substring(2, 11).toUpperCase();
           const codigoSecreto = rawCode.match(/.{1,3}/g)?.join('-') || rawCode;
           
+          // Guardamos el token en la memoria de la pestaña
+          sessionStorage.setItem('prode_session_token', miToken);
+
+          // Lo subimos a la BD junto con el nuevo perfil
           const { error: dbError } = await supabase.from('perfiles').insert({
-            id: data.user.id, nickname, codigo_recuperacion: codigoSecreto
+            id: data.user.id, 
+            nickname, 
+            codigo_recuperacion: codigoSecreto,
+            session_token: miToken
           });
           if (dbError) throw dbError;
 
           setCodigoGenerado(codigoSecreto);
         }
       } else {
-        // --- VERIFICACIÓN MULTI-PESTAÑA ANTES DE LOGUEAR ---
-        const canal = new BroadcastChannel('prode_auth_channel');
-        let loginBloqueado = false;
-
-        // 1. Escuchamos por si alguien nos deniega la entrada
-        canal.onmessage = (event) => {
-          if (event.data.type === 'LOGIN_DENIED' && event.data.email === emailFalso) {
-            loginBloqueado = true;
-          }
-        };
-
-        // 2. Preguntamos a todas las pestañas abiertas
-        canal.postMessage({ type: 'CHECK_LOGIN_ATTEMPT', email: emailFalso });
-
-        // 3. Hacemos una pausa de 400 milisegundos para darles tiempo a responder
-        await new Promise(resolve => setTimeout(resolve, 400));
-        canal.close();
-
-        // 4. Si alguien levantó la mano, bloqueamos el login cortando la función
-        if (loginBloqueado) {
-          throw new Error('Ya tenés una sesión abierta con este usuario en otra pestaña. Cerrala para poder entrar acá.');
-        }
-        // --- FIN VERIFICACIÓN ---
-
-        const { error: signInError } = await supabase.auth.signInWithPassword({ email: emailFalso, password });
+        const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({ email: emailFalso, password });
         if (signInError) throw new Error('Nickname o contraseña incorrectos.');
+
+        // Guardamos el token en la memoria de la pestaña
+        sessionStorage.setItem('prode_session_token', miToken);
+        
+        // Actualizamos nuestro perfil en la BD para decirle "Yo mando ahora"
+        await supabase.from('perfiles').update({ session_token: miToken }).eq('id', authData.user.id);
+
         router.push('/panel');
       }
     } catch (err: any) {
@@ -226,6 +228,12 @@ export default function Login() {
       <div style={{ backgroundColor: 'var(--bg-card)', padding: '40px', borderRadius: '16px', border: '1px solid var(--border-color)', width: '100%', maxWidth: '400px' }}>
         <h1 style={{ textAlign: 'center', marginBottom: '30px', fontSize: '28px' }}>⚽ {isRegistro ? 'Crear Cuenta' : 'Iniciar Sesión'}</h1>
         
+        {mensajeKick && (
+          <div style={{ backgroundColor: '#fff7ed', color: '#c2410c', padding: '12px', borderRadius: '8px', marginBottom: '20px', fontSize: '14px', textAlign: 'center', fontWeight: 'bold', border: '1px solid #fed7aa' }}>
+            {mensajeKick}
+          </div>
+        )}
+
         {error && <div style={{ backgroundColor: '#fee2e2', color: '#ef4444', padding: '12px', borderRadius: '8px', marginBottom: '20px', fontSize: '14px', textAlign: 'center', fontWeight: 'bold' }}>{error}</div>}
 
         <form onSubmit={manejarSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
